@@ -229,7 +229,7 @@ agent_core = Crew(
     process=Process.sequential,
     memory=True, # <-- Turn the brain on
     embedder={
-        "provider": "google",
+        "provider": "google-generativeai",
         "config": {
             "model": "models/text-embedding-004",
             "api_key": api_key
