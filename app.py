@@ -3,91 +3,127 @@ import os
 import sys
 import re
 
+# --- Terminal Capture Engine ---
 class StreamlitCapture:
-    """
-    Hijacks sys.stdout to pipe terminal logs directly into the Streamlit UI.
-    """
     def __init__(self, st_placeholder):
         self.st_placeholder = st_placeholder
         self.buffer = ""
-        # CrewAI uses ANSI escape codes for terminal colors (red, green, etc.)
-        # This regex strips them out so they don't look like gibberish in the browser.
         self.ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
     def write(self, data):
         clean_data = self.ansi_escape.sub('', data)
         if clean_data:
             self.buffer += clean_data
-            # Only display the last 2000 characters to prevent UI lag
             display_text = self.buffer[-2000:] if len(self.buffer) > 2000 else self.buffer
             self.st_placeholder.code(display_text, language="text")
 
     def flush(self):
         pass
 
-# Set up the visual page configuration
-st.set_page_config(
-    page_title="ResearchAgent OS",
-    page_icon="🔬",
-    layout="wide"
-)
+# --- Initialize Session State ---
+if 'pipeline_stage' not in st.session_state:
+    st.session_state.pipeline_stage = 'setup'
+if 'yaml_content' not in st.session_state:
+    st.session_state.yaml_content = ""
 
-# Sidebar for Configuration
+# --- UI Setup ---
+st.set_page_config(page_title="ResearchAgent OS", page_icon="🔬", layout="wide")
+
 with st.sidebar:
     st.header("⚙️ System Configuration")
     st.markdown("Ensure your `.env` file contains your `GEMINI_API_KEY`.")
     st.markdown("---")
-    st.info("This system autonomously searches arXiv, reads PDFs, designs architectures, and writes PyTorch code.")
+    st.info("Status: **Human-In-The-Loop Enabled**")
+    
+    # A reset button to start over
+    if st.button("🔄 Reset Pipeline"):
+        st.session_state.pipeline_stage = 'setup'
+        st.rerun()
 
-# Main UI
 st.title("🔬 ResearchAgent OS")
-st.subheader("Autonomous Machine Learning Pipeline")
 
-# User Input
-topic = st.text_input("Research Topic", value="predicting customer churn using deep learning")
+# ==========================================
+# STAGE 1: Setup & Research
+# ==========================================
+if st.session_state.pipeline_stage == 'setup':
+    st.subheader("Phase 1: Autonomous Literature Review")
+    topic = st.text_input("Research Topic", value="predicting customer churn using deep learning")
 
-if st.button("🚀 Initialize Multi-Agent Pipeline"):
-    st.markdown("---")
-    
-    status_text = st.info("System Booting... Please wait.")
-    
-    # Create an open drop-down box to hold the live logs
-    with st.expander("🕵️‍♂️ Live Agent Telemetry", expanded=True):
-        terminal_output = st.empty()
-    
-    try:
-        from main import agent_core, search_task
+    if st.button("🚀 Start Phase 1 (Research)"):
+        st.markdown("---")
+        with st.expander("🕵️‍♂️ Live Agent Telemetry", expanded=True):
+            terminal_output = st.empty()
         
-        search_task.description = f"Search arXiv for exactly two recent papers on '{topic}'. Return their PDF URLs."
-        status_text.info(f"Agents deployed. Researching: {topic}")
-        
-        # --- The Hijack ---
-        original_stdout = sys.stdout
-        sys.stdout = StreamlitCapture(terminal_output)
-        
-        # Execute the Crew
-        result = agent_core.kickoff()
-        
-        # --- Restore the Terminal ---
-        sys.stdout = original_stdout
-        
-        status_text.success("Pipeline Execution Complete!")
-        
-        st.markdown("### 📋 Final System Output")
-        st.write(result)
-        
-        st.markdown("### 📂 Generated Artifacts")
-        if os.path.exists("experiments/churn_lit_review_v1.yaml"):
+        try:
+            # Import Phase 1 logic
+            from main import research_crew, search_task
+            search_task.description = f"Search arXiv for exactly two recent papers on '{topic}'. Return their PDF URLs."
+            
+            # Hijack Terminal
+            original_stdout = sys.stdout
+            sys.stdout = StreamlitCapture(terminal_output)
+            
+            # Execute Research Team
+            research_crew.kickoff()
+            
+            sys.stdout = original_stdout
+            
+            # Read the generated YAML to present it to the user
             with open("experiments/churn_lit_review_v1.yaml", "r") as f:
-                with st.expander("View YAML Configuration"):
-                    st.code(f.read(), language="yaml")
-                    
-        if os.path.exists("experiments/train.py"):
-            with open("experiments/train.py", "r") as f:
-                with st.expander("View Generated PyTorch Code"):
-                    st.code(f.read(), language="python")
+                st.session_state.yaml_content = f.read()
+                
+            st.session_state.pipeline_stage = 'review'
+            st.rerun()
+            
+        except Exception as e:
+            sys.stdout = sys.__stdout__
+            st.error(f"Pipeline crashed: {str(e)}")
 
-    except Exception as e:
-        # If it crashes, make sure we still restore the terminal!
-        sys.stdout = sys.__stdout__
-        status_text.error(f"Pipeline crashed: {str(e)}")
+# ==========================================
+# STAGE 2: Human Review (HITL)
+# ==========================================
+elif st.session_state.pipeline_stage == 'review':
+    st.subheader("Phase 2: Human Review & Approval")
+    st.warning("⚠️ The Research Team has drafted the experiment architecture. Please review and edit the parameters below before sending it to the ML Engineer.")
+    
+    # Editable Text Area for the YAML
+    edited_yaml = st.text_area("Edit Configuration (YAML)", value=st.session_state.yaml_content, height=400)
+    
+    if st.button("✅ Approve & Generate PyTorch Code"):
+        st.markdown("---")
+        with st.expander("💻 Live Engineering Telemetry", expanded=True):
+            terminal_output = st.empty()
+            
+        try:
+            # 1. Save the user's edits back to the disk so the Engineer reads the updated version!
+            with open("experiments/churn_lit_review_v1.yaml", "w") as f:
+                f.write(edited_yaml)
+                
+            # 2. Import Phase 2 logic
+            from main import engineering_crew
+            
+            # 3. Hijack Terminal
+            original_stdout = sys.stdout
+            sys.stdout = StreamlitCapture(terminal_output)
+            
+            # 4. Execute Engineering Team
+            engineering_crew.kickoff()
+            
+            sys.stdout = original_stdout
+            st.session_state.pipeline_stage = 'complete'
+            st.rerun()
+            
+        except Exception as e:
+            sys.stdout = sys.__stdout__
+            st.error(f"Pipeline crashed: {str(e)}")
+
+# ==========================================
+# STAGE 3: Complete
+# ==========================================
+elif st.session_state.pipeline_stage == 'complete':
+    st.subheader("🎉 Experiment Generation Complete")
+    st.success("The ML Engineer has successfully built your PyTorch script based on the approved architecture.")
+    
+    if os.path.exists("experiments/train.py"):
+        with open("experiments/train.py", "r") as f:
+            st.code(f.read(), language="python")
