@@ -2,6 +2,8 @@ import streamlit as st
 import os
 import sys
 import re
+import io 
+import zipfile
 
 # --- Terminal Capture Engine ---
 class StreamlitCapture:
@@ -19,6 +21,20 @@ class StreamlitCapture:
 
     def flush(self):
         pass
+    
+def create_zip_of_experiments():
+    """Packages the experiments folder into an in-memory zip file."""
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        if os.path.exists("experiments"):
+            for root, dirs, files in os.walk("experiments"):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # Keep the archive clean by removing the absolute path
+                    archive_name = os.path.relpath(file_path, "experiments")
+                    zf.write(file_path, archive_name)
+    memory_file.seek(0)
+    return memory_file
 
 # --- Initialize Session State ---
 if 'pipeline_stage' not in st.session_state:
@@ -122,8 +138,18 @@ elif st.session_state.pipeline_stage == 'review':
 # ==========================================
 elif st.session_state.pipeline_stage == 'complete':
     st.subheader("🎉 Experiment Generation Complete")
-    st.success("The ML Engineer has successfully built your PyTorch script based on the approved architecture.")
     
     if os.path.exists("experiments/train.py"):
         with open("experiments/train.py", "r") as f:
-            st.code(f.read(), language="python")
+            with st.expander("View Generated PyTorch Code", expanded=False):
+                st.code(f.read(), language="python")
+
+    st.markdown("### 📦 Download Your Assets")
+    zip_buffer = create_zip_of_experiments()
+    
+    st.download_button(
+        label="⬇️ Download Experiments Folder (.zip)",
+        data=zip_buffer,
+        file_name="research_experiment.zip",
+        mime="application/zip"
+    )
