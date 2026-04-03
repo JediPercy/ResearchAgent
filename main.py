@@ -226,10 +226,8 @@ coding_task = Task(
 agent_core = Crew(
     agents=[librarian_agent, summarizer_agent, researcher_agent, ml_engineer_agent],
     tasks=[search_task, read_task, experiment_task, coding_task],
-    process=Process.hierarchical,              # <-- The new Boss is in town
-    manager_llm="gemini/gemini-2.5-flash",     # <-- The Manager's brain
-    memory=False,
-    max_rpm=4,                
+    process=Process.sequential,              # <-- The new Boss is in town
+    memory=False,                
     verbose=True
 )
 
@@ -237,11 +235,14 @@ agent_core = Crew(
 # 5. Run the Pipeline
 # ==========================================
 
-if __name__ == "__main__":
-    print("Initializing Lit Review Sub-Team...")
-    result = agent_core.kickoff()
+# Commenting just for now, building the frontend/Streamlit and ran out of credits on 4/3/2026. 
+# Will re-enable once I have more Gemini API credits. 
+
+# if __name__ == "__main__":
+#     print("Initializing Lit Review Sub-Team...")
+#     result = agent_core.kickoff()
     
-    print("\n========================================")
-    print("FINAL EXPERIMENT OUTPUT:")
-    print("========================================")
-    print(result)
+#     print("\n========================================")
+#     print("FINAL EXPERIMENT OUTPUT:")
+#     print("========================================")
+#     print(result)
