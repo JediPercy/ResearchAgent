@@ -226,8 +226,15 @@ coding_task = Task(
 agent_core = Crew(
     agents=[librarian_agent, summarizer_agent, researcher_agent, ml_engineer_agent],
     tasks=[search_task, read_task, experiment_task, coding_task],
-    process=Process.sequential,              # <-- The new Boss is in town
-    memory=False,                
+    process=Process.sequential,
+    memory=True, # <-- Turn the brain on
+    embedder={
+        "provider": "google",
+        "config": {
+            "model": "models/text-embedding-004",
+            "api_key": api_key
+        }
+    },
     verbose=True
 )
 
