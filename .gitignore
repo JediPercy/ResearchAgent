@@ -2,3 +2,5 @@
 research_env/
 takeaways.txt
 experiments/
+__pycache__/
+*.pyc

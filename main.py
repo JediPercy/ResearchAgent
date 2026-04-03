@@ -169,6 +169,19 @@ researcher_agent = Agent(
     llm="gemini/gemini-2.5-flash"  # Heavy reasoning engine
 )
 
+ml_engineer_agent = Agent(
+    role='Senior ML Engineer',
+    goal='Read YAML configurations and write executable PyTorch training scripts.',
+    backstory=(
+        "You are a brilliant Python developer specializing in PyTorch. You take "
+        "architectural blueprints and turn them into bug-free, production-ready code."
+    ),
+    verbose=True,
+    allow_delegation=False,
+    tools=[read_yaml_tool, save_python_tool], 
+    llm="gemini/gemini-2.5-pro"  # Heavy reasoning engine for coding
+)
+
 # ==========================================
 # 3. Define the Tasks
 # ==========================================
@@ -195,15 +208,28 @@ experiment_task = Task(
     agent=researcher_agent
 )
 
+coding_task = Task(
+    description=(
+        "Use the 'Read YAML Configuration File' tool to read 'churn_lit_review_v1.yaml'. "
+        "Based EXACTLY on that configuration, write a complete, executable PyTorch "
+        "script. Include a dummy dataset generation step so the script runs out of the box. "
+        "CRITICAL: Use the 'Save Python Script' tool to save your output as 'train.py'."
+    ),
+    expected_output="A confirmation string stating the Python script has been saved.",
+    agent=ml_engineer_agent
+)
+
 # ==========================================
 # 4. Assemble the Crew
 # ==========================================
 
 agent_core = Crew(
-    agents=[librarian_agent, summarizer_agent, researcher_agent],
-    tasks=[search_task, read_task, experiment_task],
-    process=Process.sequential, 
-    memory=False,                
+    agents=[librarian_agent, summarizer_agent, researcher_agent, ml_engineer_agent],
+    tasks=[search_task, read_task, experiment_task, coding_task],
+    process=Process.hierarchical,              # <-- The new Boss is in town
+    manager_llm="gemini/gemini-2.5-flash",     # <-- The Manager's brain
+    memory=False,
+    max_rpm=4,                
     verbose=True
 )
 
