@@ -1,74 +1,218 @@
 import os
+import requests
+import arxiv
+from io import BytesIO
+from pypdf import PdfReader
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process
+from crewai.tools import BaseTool
 
-# 1. Load the variables from the .env file
+# ==========================================
+# 0. Environment Setup
+# ==========================================
 load_dotenv()
 
-# 2. Safely retrieve the key (Optional validation step)
-api_key = os.environ.get("OPENAI_API_KEY")
-
+api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
-    raise ValueError("OPENAI_API_KEY not found. Please check your .env file.")
+    raise ValueError("GEMINI_API_KEY not found. Please check your .env file.")
 
 # ==========================================
-# 1. Define the Agents
+# 1. Define Custom Tools
 # ==========================================
 
-data_agent = Agent(
-    role='Senior Data Engineer',
-    goal='Gather, clean, and preprocess datasets using numpy and pandas, and retrieve external data from APIs.',
-    backstory=(
-        "You are a meticulous data engineer. Your job is to fetch raw data, "
-        "handle missing values, and structure it perfectly into pandas DataFrames "
-        "so the research team can train models without data pipeline errors."
-    ),
+class SaveYAMLTool(BaseTool):
+    name: str = "Save YAML Configuration File"
+    description: str = (
+        "Saves the generated YAML configuration content to a local file. "
+        "Inputs must be 'content' (the YAML string) and 'filename' (e.g., 'model.yaml')."
+    )
+
+    def _run(self, content: str, filename: str) -> str:
+        directory = "experiments"
+        os.makedirs(directory, exist_ok=True)
+        filepath = os.path.join(directory, filename)
+        with open(filepath, "w") as f:
+            f.write(content)
+        return f"Successfully saved experiment configuration to {filepath}"
+
+class ArxivSearchTool(BaseTool):
+    name: str = "Search arXiv for ML Papers"
+    description: str = (
+        "Searches the arXiv database for academic papers. "
+        "Input should be a specific search query (e.g., 'customer churn prediction deep learning'). "
+        "Returns a list of relevant papers including their titles, summaries, and PDF links."
+    )
+
+    def _run(self, query: str) -> str:
+        client = arxiv.Client()
+        search = arxiv.Search(
+            query=query,
+            max_results=2, # Kept to 2 to prevent API rate limiting during testing
+            sort_by=arxiv.SortCriterion.Relevance
+        )
+
+        results = []
+        for paper in client.results(search):
+            paper_info = (
+                f"Title: {paper.title}\n"
+                f"Summary: {paper.summary}\n"
+                f"PDF Link: {paper.pdf_url}\n"
+                "-----------------"
+            )
+            results.append(paper_info)
+
+        if not results:
+            return "No papers found for that query."
+        return "\n\n".join(results)
+
+class PDFReaderTool(BaseTool):
+    name: str = "Read PDF from URL"
+    description: str = (
+        "Reads and extracts text from a PDF given its URL. "
+        "Input should be the direct URL to the PDF file."
+    )
+
+    def _run(self, url: str) -> str:
+        try:
+            # Fetch the PDF data
+            response = requests.get(url)
+            response.raise_for_status()
+            
+            # Read the PDF directly from RAM
+            pdf_file = BytesIO(response.content)
+            reader = PdfReader(pdf_file)
+            
+            text = ""
+            # Pro-Tip: We cap this at 3 pages for local testing so we don't hit 
+            # the Gemini API tokens-per-minute rate limit on standard tiers.
+            num_pages = min(len(reader.pages), 3) 
+            for i in range(num_pages):
+                text += reader.pages[i].extract_text() + "\n\n"
+                
+            return text
+        except Exception as e:
+            return f"Failed to read PDF: {str(e)}"
+        
+class ReadYAMLTool(BaseTool):
+    name: str = "Read YAML Configuration File"
+    description: str = (
+        "Reads a YAML file from the experiments directory. "
+        "Input should be the filename (e.g., 'churn_lit_review_v1.yaml')."
+    )
+
+    def _run(self, filename: str) -> str:
+        filepath = os.path.join("experiments", filename)
+        try:
+            with open(filepath, "r") as f:
+                return f.read()
+        except Exception as e:
+            return f"Failed to read file: {str(e)}"
+
+class SavePythonTool(BaseTool):
+    name: str = "Save Python Script"
+    description: str = (
+        "Saves the generated Python code to a local file. "
+        "Inputs must be 'content' (the python code) and 'filename' (e.g., 'train.py')."
+    )
+
+    def _run(self, content: str, filename: str) -> str:
+        # Strip out markdown code blocks if the LLM adds them
+        content = content.replace("```python", "").replace("```", "").strip()
+        
+        directory = "experiments"
+        os.makedirs(directory, exist_ok=True)
+        filepath = os.path.join(directory, filename)
+        
+        with open(filepath, "w") as f:
+            f.write(content)
+        return f"Successfully saved Python script to {filepath}"
+
+# Instantiate the tools
+save_yaml_tool = SaveYAMLTool()
+arxiv_search_tool = ArxivSearchTool()
+pdf_reader_tool = PDFReaderTool()
+read_yaml_tool = ReadYAMLTool()
+save_python_tool = SavePythonTool()
+
+
+# ==========================================
+# 2. Define the Agents (The Micro-Agent Routing)
+# ==========================================
+
+librarian_agent = Agent(
+    role='Academic Librarian',
+    goal='Search the arXiv database to find the most relevant PDF links for machine learning methodologies.',
+    backstory="You are an expert at navigating academic databases. You find the best paper URLs and pass them down the chain.",
     verbose=True,
-    allow_delegation=False
+    allow_delegation=False,
+    tools=[arxiv_search_tool], 
+    llm="gemini/gemini-2.5-flash"  # Fast, cheap searcher
+)
+
+summarizer_agent = Agent(
+    role='Senior Summarizer',
+    goal='Take PDF URLs, read the documents, and summarize the mathematical methodologies into a markdown report.',
+    backstory="You are a speed-reading researcher. You extract exact PyTorch layers, loss functions, and hyperparameters from dense texts.",
+    verbose=True,
+    allow_delegation=False,
+    tools=[pdf_reader_tool], 
+    llm="gemini/gemini-2.5-flash"  # High-context window reader
+)
+
+researcher_agent = Agent(
+    role='Lead ML Researcher',
+    goal='Take literature summaries and design machine learning experiments, saving them as YAML configurations.',
+    backstory="You are the lead architect. You do not search or read. You take summaries and design production-ready model configurations.",
+    verbose=True,
+    allow_delegation=False,
+    tools=[save_yaml_tool], 
+    llm="gemini/gemini-2.5-flash"  # Heavy reasoning engine
 )
 
 # ==========================================
-# 2. Define the Tasks
+# 3. Define the Tasks
 # ==========================================
 
-data_task = Task(
-    description=(
-        "Simulate fetching a dataset for a binary classification problem "
-        "(e.g., predicting customer churn). Outline the python code using pandas "
-        "to clean the data, handle nulls, and normalize the features."
-    ),
-    expected_output="A Python script using pandas and numpy to clean the simulated dataset.",
-    agent=data_agent
+search_task = Task(
+    description="Search arXiv for exactly two recent papers on 'predicting customer churn using deep learning'. Return their PDF URLs.",
+    expected_output="A list of two PDF URLs.",
+    agent=librarian_agent
+)
+
+read_task = Task(
+    description="Using the PDF URLs from the Librarian, read the papers. Extract the specific neural network architectures (e.g., LSTM, FeedForward) and hyperparameters they used.",
+    expected_output="A dense markdown summary of the architectures and tuning parameters found in the papers.",
+    agent=summarizer_agent
 )
 
 experiment_task = Task(
     description=(
-        "Based on the cleaned data pipeline from the Data Engineer, write a complete "
-        "YAML configuration file for this experiment. It must include hyperparameters "
-        "for a PyTorch model and specify an Optuna study setup for tuning."
+        "Based on the literature summary, write a complete YAML configuration file for a new churn prediction experiment. "
+        "Incorporate the architecture trends you see in the summary. "
+        "CRITICAL: You MUST use the 'Save YAML Configuration File' tool to save your output. Name the file 'churn_lit_review_v1.yaml'."
     ),
-    expected_output="A well-formatted YAML file containing model architecture, hyperparameters, and Optuna ranges.",
-    agent=experiment_agent
+    expected_output="A confirmation string stating the YAML file has been saved to the disk.",
+    agent=researcher_agent
 )
 
 # ==========================================
-# 3. Assemble the Crew (AgentCore)
+# 4. Assemble the Crew
 # ==========================================
 
 agent_core = Crew(
-    agents=[data_agent, experiment_agent],
-    tasks=[data_task, experiment_task],
+    agents=[librarian_agent, summarizer_agent, researcher_agent],
+    tasks=[search_task, read_task, experiment_task],
     process=Process.sequential, 
-    memory=True,                # Activates ChromaDB locally
+    memory=False,                
     verbose=True
 )
 
 # ==========================================
-# 4. Run the Pipeline
+# 5. Run the Pipeline
 # ==========================================
 
 if __name__ == "__main__":
-    print("Initializing AgentCore ML Research Team...")
+    print("Initializing Lit Review Sub-Team...")
     result = agent_core.kickoff()
     
     print("\n========================================")

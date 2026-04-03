@@ -79,10 +79,55 @@ Currently, ResearchAgent is configured for local execution using ChromaDB for ze
 
 ### Prerequisites
 * Python 3.10+
-* Valid LLM API Key (OpenAI, Anthropic, etc.)
+* Valid LLM API Key (Gemini, Anthropic, etc.)
 
 ### Installation
 1. Clone the repository:
    ```bash
    git clone [https://github.com/yourusername/ResearchAgent.git](https://github.com/yourusername/ResearchAgent.git)
+   ```
+
+   ```
    cd ResearchAgent
+   ```
+
+2. Create an isolated virtual environment
+This prevents dependency conflicts with your system-wide Python installation.
+
+On macOS and Linux:
+```python -m venv research_env```
+
+On Windows:
+```python -m venv research_env```
+
+3. Activate the virtual environment
+Ensure your terminal is actively using the isolated environment before installing packages.
+
+On macOS and Linux:
+```source research_env/bin/activate```
+
+On Windows:
+```research_env\Scripts\activate```
+
+4. Install project dependencies
+Install the required packages for the orchestration framework and local vector memory.
+
+```pip install -r requirements.txt```
+
+(If you are building from scratch and do not have a requirements.txt file yet, run): 
+```pip install crewai langchain-google-genai chromadb pandas numpy python-dotenv)```
+
+5. Configure environment variables
+Create a hidden .env file in the root directory of the project to securely store your API keys.
+
+```touch .env```
+
+Open the .env file in your text editor and add:
+
+[MODEL_CHOICE]_API_KEY=your_actual_api_key_here
+(I used Google Gemini initially.)
+
+Execution
+Run the base orchestrator to initialize the core Data -> Experiment pipeline. Ensure your virtual environment is activated before running.
+
+```python main.py```

@@ -1,2 +1,4 @@
 .env
-agentcore_env/
+research_env/
+takeaways.txt
+experiments/
