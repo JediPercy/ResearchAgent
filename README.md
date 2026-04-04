@@ -1,133 +1,86 @@
-# ResearchAgent: Autonomous Multi-Agent ML Research Infrastructure
+# ResearchAgent OS: Autonomous Multi-Agent ML Research Infrastructure
 
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![Docker](https://img.shields.io/badge/docker-containerized-0db7ed)
+![UI](https://img.shields.io/badge/UI-Streamlit-FF4B4B)
 ![Framework](https://img.shields.io/badge/orchestration-CrewAI-orange)
-![Memory](https://img.shields.io/badge/memory-ChromaDB-green)
 ![ML Stack](https://img.shields.io/badge/ML-PyTorch%20%7C%20Optuna-red)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-**ResearchAgent** is a distributed, multi-agent system engineered to automate the end-to-end machine learning research lifecycle. 
+**ResearchAgent OS** is a distributed, containerized multi-agent system engineered to automate the end-to-end machine learning research lifecycle. 
 
-Transitioning away from monolithic LLM usage, ResearchAgent leverages a decoupled topology of specialized agents to execute complex applied science workflows. The system is designed to autonomously handle literature ingestion, big data processing, neural network architecture, model training loops, and technical documentation—all synchronized via shared vector memory and scalable cloud storage.
+Transitioning away from monolithic LLM usage, ResearchAgent leverages a decoupled topology of specialized agents to execute complex applied science workflows. The system autonomously handles literature ingestion, neural network architecture design, model training loops, and technical documentation—packaged within a stateless web interface featuring Human-In-The-Loop (HITL) oversight.
+
+---
+
+## Key Capabilities
+
+* **Autonomous Literature Review:** Agents dynamically scrape arXiv, parse PDFs, and extract complex mathematical architectures.
+* **Dynamic Code Generation:** Translates academic mathematical formulations directly into custom, executable `PyTorch` neural network classes.
+* **Human-In-The-Loop (HITL):** A stateless UI pipeline that pauses execution, allowing human engineers to review and modify YAML experiment configurations before compute resources are expended.
+* **Containerized Deployment:** Fully Dockerized architecture ready for immediate deployment to Google Cloud Run or AWS ECS.
 
 ---
 
 ## Core Architecture & Agent Topology
 
-The system operates on a hub-and-spoke model, governed by a Main Agent that manages state, memory, and task delegation via the `AgentCore` communication protocol.
+The system operates on a multi-phase, hub-and-spoke model via the `AgentCore` communication protocol.
 
-### 0. The Main Agent (Orchestrator)
-The central nervous system of the cluster.
-* **State & Memory:** Local vector embeddings via `ChromaDB` (with production architecture mapped for `Pinecone`).
-* **Storage:** Unified data lake and artifact storage via AWS S3 containers.
-* **Routing:** `AgentCore` protocol for inter-agent context sharing.
+### Phase 1: The Research Team
+* **Academic Librarian Agent:** Navigates academic databases and retrieves contextually relevant PDF URLs.
+* **Summarizer Agent:** Ingests raw PDFs, extracting core methodologies, loss functions, and dataset requirements.
+* **Senior ML Researcher Agent:** Synthesizes extracted data into a deterministic `YAML` MLOps configuration file representing the experiment.
 
-### 1. Literature Review Agent
-Responsible for grounding experiments in current academic research.
-* **Document Processing:** Ingests and parses academic papers using `PyPDF`.
-* **Data Gathering:** Executes custom web scraping scripts and interfaces with academic APIs.
-* **Processing:** Utilizes frontier LLMs for deep summarization and dense vector embeddings.
+### Phase 2: Human Oversight
+* **Streamlit State Manager:** Pauses agent execution, surfacing the generated `YAML` for human validation and hyperparameter tuning.
 
-### 2. Data Agent
-Handles raw data ingestion, ETL pipelines, and feature engineering.
-* **Big Data Compute:** Designed for `PySpark` and `Databricks` environments.
-* **Local Processing:** `numpy` and `pandas` for structured dataframe manipulation.
-* **API Integration:** Pulls dynamic datasets from endpoints like the NBA API, HuggingFace, GitHub, and Spotify.
-* **Storage:** Reads/writes cleaned datasets directly to the Main Agent's shared S3 bucket.
-
-### 3. Experiment Agent
-Focuses entirely on model design and configuration management.
-* **Framework:** Architects deep learning models in `PyTorch`.
-* **Optimization:** Configures hyperparameter tuning studies using `Optuna`.
-* **State Tracking:** Generates deterministic `YAML` configuration files for every experimental run to ensure reproducibility.
-
-### 4. Train/Evaluate Agent
-The heavy compute executor for the ML pipelines.
-* **Execution Environment:** Triggers code via Bash scripts or Jupyter Notebooks.
-* **Compute Infrastructure:** Designed to deploy on Kubernetes Clusters (EKS) for optimized GPU orchestration or AWS EC2 instances.
-* **ML Stack:** `PyTorch`, `Scikit-Learn`, `Keras`.
-* **Experiment Tracking:** Logs metrics via AWS SageMaker.
-* **Evaluation:** Generates performance visualization using `Seaborn` and `Matplotlib`.
-
-### 5. Reporting & Writing Agent
-Translates quantitative results into digestible technical documentation.
-* **Document Generation:** Native Markdown writer with LaTeX rendering capabilities for mathematical formulation.
-* **Visual Integration:** Embeds `Matplotlib` and `Seaborn` plots directly into reports.
-* **Presentation Layer:** Automates slide deck design via the Canva API.
-* **Knowledge Management:** Syncs final reports to organizational wikis (Confluence, Notion, Obsidian) and exports via `PyPDF`.
-
-### 6. CI/CD & Workflow Agents (Auxiliary)
-* **GitHub Agent:** Automates version control by pushing code changes and verified experiment configurations to existing repositories via the GitHub API, facilitating seamless collaboration across applied science teams.
-* **JIRA Agent:** Manages Agile workflows, creates tickets for data pipeline blockers, and keeps the SWE/ML research team aligned on deployment schedules.
+### Phase 3: The Engineering Team
+* **ML Engineer Agent:** Reads the approved `YAML` and dynamically writes the PyTorch training scripts, including custom data loaders, complex neural network classes, and evaluation metrics.
 
 ---
 
-## Technology Stack
+## Getting Started
 
-* **Agent Orchestration:** Python, CrewAI, LangChain
-* **Vector Memory:** ChromaDB (Local Prototype) -> Pinecone (Production)
-* **Machine Learning:** PyTorch, Keras, Scikit-Learn, Optuna
-* **Data Engineering:** Pandas, Numpy, PySpark (Planned)
-* **Infrastructure & Compute:** AWS S3, AWS EC2, AWS SageMaker, Kubernetes (Planned)
-* **Documentation & Vis:** PyPDF, PyYAML, Seaborn, Canva API, LaTeX
-
----
-
-## Getting Started (Local Prototyping)
-
-Currently, ResearchAgent is configured for local execution using ChromaDB for zero-latency, cost-free vector memory during the prototyping phase.
+ResearchAgent OS can be run via Docker (Recommended) or as a local Python environment.
 
 ### Prerequisites
-* Python 3.10+
-* Valid LLM API Key (Gemini, Anthropic, etc.)
+* Valid LLM API Key (Gemini, Anthropic, OpenAI, etc.)
+* Docker Desktop (If containerizing)
+* Python 3.11+ (If running locally)
 
-### Installation
-1. Clone the repository:
+### Setup
+1. **Clone the repository:**
    ```bash
    git clone [https://github.com/yourusername/ResearchAgent.git](https://github.com/yourusername/ResearchAgent.git)
-   ```
-
-   ```
    cd ResearchAgent
+   touch .env
+   GEMINI_API_KEY=your_actual_api_key_here (or your choice of model)
+   ```
+2. **Run via Docker**
+   ```bash
+   # Build the image
+   docker build -t research-agent-os .
+
+   # Run the container locally on port 8501
+   docker run --env-file .env -p 8501:8501 research-agent-os
    ```
 
-2. Create an isolated virtual environment
-This prevents dependency conflicts with your system-wide Python installation.
+3. **Run via Local Environment**
+   ```bash
+   # Create and activate virtual environment
+   python -m venv research_env
+   source research_env/bin/activate  # On Windows: research_env\Scripts\activate
 
-On macOS and Linux:
-```python -m venv research_env```
+   # Install dependencies
+   pip install -r requirements.txt
 
-On Windows:
-```python -m venv research_env```
+   # Launch the Streamlit OS
+   streamlit run app.py
+   ```
 
-3. Activate the virtual environment
-Ensure your terminal is actively using the isolated environment before installing packages.
-
-On macOS and Linux:
-```source research_env/bin/activate```
-
-On Windows:
-```research_env\Scripts\activate```
-
-4. Install project dependencies
-Install the required packages for the orchestration framework and local vector memory.
-
-```pip install -r requirements.txt```
-
-(If you are building from scratch and do not have a requirements.txt file yet, run): 
-```pip install crewai langchain-google-genai chromadb pandas numpy python-dotenv)```
-
-5. Configure environment variables
-Create a hidden .env file in the root directory of the project to securely store your API keys.
-
-```touch .env```
-
-Open the .env file in your text editor and add:
-
-[MODEL_CHOICE]_API_KEY=your_actual_api_key_here
-(I used Google Gemini initially.)
-
-Execution
-Run the base orchestrator to initialize the core Data -> Experiment pipeline. Ensure your virtual environment is activated before running.
-
-```python main.py```
+## Technology Stack
+* **UI & Deployment:** Streamlit, Docker
+* **Agent Orchestration:** Python, CrewAI
+* **Machine Learning:** PyTorch, Scikit-Learn
+* **Data Engineering (Planned):** Pandas, Numpy, PySpark 
+* **Infrastructure (Planned):** AWS S3, Kubernetes (EKS)

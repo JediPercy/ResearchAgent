@@ -38,7 +38,7 @@ def create_zip_of_experiments():
 
 # --- Initialize Session State ---
 if 'pipeline_stage' not in st.session_state:
-    st.session_state.pipeline_stage = 'setup'
+    st.session_state.pipeline_stage = 'setup'  # stages: setup -> review -> complete
 if 'yaml_content' not in st.session_state:
     st.session_state.yaml_content = ""
 
