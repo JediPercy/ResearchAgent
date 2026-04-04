@@ -182,6 +182,15 @@ ml_engineer_agent = Agent(
     llm="gemini/gemini-2.5-pro"  # Heavy reasoning engine for coding
 )
 
+data_engineer_agent = Agent(
+    role="Senior Data Engineer",
+    goal="Build robust Python data pipelines using Pandas to ingest, clean, and preprocess raw datasets for machine learning.",
+    backstory="You are a veteran Data Engineer. You excel at handling missing values, encoding categorical variables, and scaling numerical features. You write clean, well-documented Pandas code that saves processed datasets as CSVs.",
+    verbose=True,
+    allow_delegation=False,
+    # llm=manager_llm  <-- Uncomment if you are strictly passing the LLM object
+)
+
 # ==========================================
 # 3. Define the Tasks
 # ==========================================
@@ -211,12 +220,28 @@ experiment_task = Task(
 coding_task = Task(
     description=(
         "Use the 'Read YAML Configuration File' tool to read 'churn_lit_review_v1.yaml'. "
-        "Based EXACTLY on that configuration, write a complete, executable PyTorch "
-        "script. Include a dummy dataset generation step so the script runs out of the box. "
+        "Based EXACTLY on that configuration, write a complete, executable PyTorch script. "
+        "CRITICAL DATA INSTRUCTION: Do NOT generate dummy data. You must load the dataset "
+        "from 'experiments/cleaned_churn_data.csv' using pandas, convert the features and "
+        "target labels into PyTorch tensors, and build a proper DataLoader for the training loop. "
         "CRITICAL: Use the 'Save Python Script' tool to save your output as 'train.py'."
     ),
-    expected_output="A confirmation string stating the Python script has been saved.",
+    expected_output="A confirmation string stating the Python script has been saved, utilizing the cleaned CSV data.",
     agent=ml_engineer_agent
+)
+
+data_pipeline_task = Task(
+    description=(
+        "Write a Python script named `experiments/data_pipeline.py`.\n"
+        "This script must:\n"
+        "1. Use pandas to download the Telco Customer Churn dataset from a public URL (e.g., 'https://raw.githubusercontent.com/IBM/telco-customer-churn-on-icp4d/master/data/Telco-Customer-Churn.csv').\n"
+        "2. Handle missing values appropriately.\n"
+        "3. Encode categorical variables using One-Hot Encoding or Label Encoding.\n"
+        "4. Scale numerical features using StandardScaler.\n"
+        "5. Save the final cleaned dataframe as `experiments/cleaned_churn_data.csv`."
+    ),
+    expected_output="A fully functioning Python script saved as `experiments/data_pipeline.py` that outputs a cleaned CSV.",
+    agent=data_engineer_agent
 )
 
 # ==========================================
@@ -234,7 +259,7 @@ research_crew = Crew(
 
 # Phase 2: Generates the Python Code
 engineering_crew = Crew(
-    agents=[ml_engineer_agent],
+    agents=[data_engineer_agent,ml_engineer_agent],
     tasks=[coding_task],
     process=Process.sequential, 
     memory=False,                
