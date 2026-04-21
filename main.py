@@ -6,16 +6,25 @@ from pypdf import PdfReader
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process
 from crewai.tools import BaseTool
+import logging
+import warnings
 
 # ==========================================
 # 0. Environment Setup
 # ==========================================
 load_dotenv()
 
+os.environ["CREWAI_DISABLE_TELEMETRY"] = "true"
+warnings.filterwarnings("ignore")
+
+logging.getLogger('LiteLLM').setLevel(logging.CRITICAL)
+logging.getLogger("streamlit.runtime.scriptrunner.script_run_context").setLevel(logging.ERROR)
+
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
     raise ValueError("GEMINI_API_KEY not found. Please check your .env file.")
 
+logging.getLogger("streamlit.runtime.scriptrunner.script_run_context").setLevel(logging.ERROR)
 # ==========================================
 # 1. Define Custom Tools
 # ==========================================
@@ -44,10 +53,16 @@ class ArxivSearchTool(BaseTool):
     )
 
     def _run(self, query: str) -> str:
-        client = arxiv.Client()
+        # Explicitly configure the client to respect rate limits
+        client = arxiv.Client(
+            page_size=2,          # Match our max_results to prevent 100-item page requests
+            delay_seconds=3.0,    # Mandatory 3-second delay between API calls
+            num_retries=3         # Automatically retry if we still hit a 429
+        )
+        
         search = arxiv.Search(
             query=query,
-            max_results=2, # Kept to 2 to prevent API rate limiting during testing
+            max_results=2,
             sort_by=arxiv.SortCriterion.Relevance
         )
 
@@ -74,17 +89,13 @@ class PDFReaderTool(BaseTool):
 
     def _run(self, url: str) -> str:
         try:
-            # Fetch the PDF data
             response = requests.get(url)
             response.raise_for_status()
             
-            # Read the PDF directly from RAM
             pdf_file = BytesIO(response.content)
             reader = PdfReader(pdf_file)
             
             text = ""
-            # Pro-Tip: We cap this at 3 pages for local testing so we don't hit 
-            # the Gemini API tokens-per-minute rate limit on standard tiers.
             num_pages = min(len(reader.pages), 3) 
             for i in range(num_pages):
                 text += reader.pages[i].extract_text() + "\n\n"
@@ -116,7 +127,6 @@ class SavePythonTool(BaseTool):
     )
 
     def _run(self, content: str, filename: str) -> str:
-        # Strip out markdown code blocks if the LLM adds them
         content = content.replace("```python", "").replace("```", "").strip()
         
         directory = "experiments"
@@ -136,8 +146,10 @@ save_python_tool = SavePythonTool()
 
 
 # ==========================================
-# 2. Define the Agents (The Micro-Agent Routing)
+# 2. Define the Agents
 # ==========================================
+
+llm_string = "gemini/gemini-2.0-flash"
 
 librarian_agent = Agent(
     role='Academic Librarian',
@@ -146,7 +158,8 @@ librarian_agent = Agent(
     verbose=True,
     allow_delegation=False,
     tools=[arxiv_search_tool], 
-    llm="gemini/gemini-2.5-flash"  # Fast, cheap searcher
+    llm=llm_string,
+    max_retry_limit=5
 )
 
 summarizer_agent = Agent(
@@ -156,7 +169,8 @@ summarizer_agent = Agent(
     verbose=True,
     allow_delegation=False,
     tools=[pdf_reader_tool], 
-    llm="gemini/gemini-2.5-flash"  # High-context window reader
+    llm=llm_string,
+    max_retry_limit=5
 )
 
 researcher_agent = Agent(
@@ -166,7 +180,8 @@ researcher_agent = Agent(
     verbose=True,
     allow_delegation=False,
     tools=[save_yaml_tool], 
-    llm="gemini/gemini-2.5-flash"  # Heavy reasoning engine
+    llm=llm_string,
+    max_retry_limit=5
 )
 
 ml_engineer_agent = Agent(
@@ -179,7 +194,8 @@ ml_engineer_agent = Agent(
     verbose=True,
     allow_delegation=False,
     tools=[read_yaml_tool, save_python_tool], 
-    llm="gemini/gemini-2.5-pro"  # Heavy reasoning engine for coding
+    llm=llm_string,
+    max_retry_limit=5
 )
 
 data_engineer_agent = Agent(
@@ -188,7 +204,9 @@ data_engineer_agent = Agent(
     backstory="You are a veteran Data Engineer. You excel at handling missing values, encoding categorical variables, and scaling numerical features. You write clean, well-documented Pandas code that saves processed datasets as CSVs.",
     verbose=True,
     allow_delegation=False,
-    # llm=manager_llm  <-- Uncomment if you are strictly passing the LLM object
+    tools=[save_python_tool], 
+    llm=llm_string,
+    max_retry_limit=5 
 )
 
 # ==========================================
@@ -217,6 +235,21 @@ experiment_task = Task(
     agent=researcher_agent
 )
 
+data_pipeline_task = Task(
+    description=(
+        "Write a Python script named `experiments/data_pipeline.py`.\n"
+        "This script must:\n"
+        "1. Use pandas to download the Telco Customer Churn dataset from a public URL (e.g., 'https://raw.githubusercontent.com/IBM/telco-customer-churn-on-icp4d/master/data/Telco-Customer-Churn.csv').\n"
+        "2. Handle missing values appropriately.\n"
+        "3. Encode categorical variables using One-Hot Encoding or Label Encoding.\n"
+        "4. Scale numerical features using StandardScaler.\n"
+        "5. Save the final cleaned dataframe as `experiments/cleaned_churn_data.csv`.\n"
+        "CRITICAL: Use the 'Save Python Script' tool to save your output as 'data_pipeline.py'."
+    ),
+    expected_output="A fully functioning Python script saved as `experiments/data_pipeline.py` that outputs a cleaned CSV.",
+    agent=data_engineer_agent
+)
+
 coding_task = Task(
     description=(
         "Use the 'Read YAML Configuration File' tool to read 'churn_lit_review_v1.yaml'. "
@@ -230,20 +263,6 @@ coding_task = Task(
     agent=ml_engineer_agent
 )
 
-data_pipeline_task = Task(
-    description=(
-        "Write a Python script named `experiments/data_pipeline.py`.\n"
-        "This script must:\n"
-        "1. Use pandas to download the Telco Customer Churn dataset from a public URL (e.g., 'https://raw.githubusercontent.com/IBM/telco-customer-churn-on-icp4d/master/data/Telco-Customer-Churn.csv').\n"
-        "2. Handle missing values appropriately.\n"
-        "3. Encode categorical variables using One-Hot Encoding or Label Encoding.\n"
-        "4. Scale numerical features using StandardScaler.\n"
-        "5. Save the final cleaned dataframe as `experiments/cleaned_churn_data.csv`."
-    ),
-    expected_output="A fully functioning Python script saved as `experiments/data_pipeline.py` that outputs a cleaned CSV.",
-    agent=data_engineer_agent
-)
-
 # ==========================================
 # 4. Assemble the Crew
 # ==========================================
@@ -254,16 +273,16 @@ research_crew = Crew(
     tasks=[search_task, read_task, experiment_task],
     process=Process.sequential, 
     memory=False,                
-    verbose=True
+    verbose=True,
+    max_rpm=100
 )
 
 # Phase 2: Generates the Python Code
 engineering_crew = Crew(
-    agents=[data_engineer_agent,ml_engineer_agent],
-    tasks=[coding_task],
+    agents=[data_engineer_agent, ml_engineer_agent],
+    tasks=[data_pipeline_task, coding_task],
     process=Process.sequential, 
     memory=False,                
-    verbose=True
+    verbose=True,
+    max_rpm=100
 )
-
-# Don't need if __name__ == "__main__" guard since we're calling kickoff() directly from Streamlit
